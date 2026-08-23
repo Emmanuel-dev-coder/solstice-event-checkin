@@ -1,51 +1,101 @@
+from flask import Flask, request, jsonify
+import redis
+
+app = Flask(__name__)
+
+r = redis.Redis(
+    host="localhost",
+    port=6379,
+    decode_responses=True
+)
+
+STREAM_NAME = "print-requests"
+
 attendees = {
-    "A001": {"name": "Alice", "checked_in": False},
-    "A002": {"name": "Bob", "checked_in": False},
-    "A003": {"name": "Charlie", "checked_in": False},
+    "A001": {"name": "Alice", "status": "NOT_CHECKED_IN"},
+    "A002": {"name": "Bob", "status": "NOT_CHECKED_IN"},
+    "A003": {"name": "Charlie", "status": "NOT_CHECKED_IN"},
 }
 
 
-def print_badge(attendee):
-    print(f"Sending badge print request for {attendee['name']}...")
-    print("Waiting for printer response...")
-
-    # Simulated synchronous printer response
-    print("Printer response: SUCCESS")
-    return True
-
-
-def check_in(qr_code):
-    attendee = attendees.get(qr_code)
+@app.route("/check-in/<attendee_id>", methods=["POST"])
+def check_in(attendee_id):
+    attendee = attendees.get(attendee_id)
 
     if attendee is None:
-        print("Unknown attendee.")
-        return
+        return jsonify({"error": "Unknown attendee"}), 404
 
-    if attendee["checked_in"]:
-        print(f"{attendee['name']} is already checked in.")
-        print("No second badge will be printed.")
-        return
+    # Prevent duplicate badges
+    if attendee["status"] in ["PENDING", "CHECKED_IN"]:
+        return jsonify({
+            "message": f"{attendee['name']} is already being processed or checked in.",
+            "status": attendee["status"]
+        }), 200
 
-    print(f"QR scan received for {attendee['name']}.")
+    # Mark as pending before sending the print request
+    attendee["status"] = "PENDING"
 
-    success = print_badge(attendee)
+    message_id = r.xadd(
+        STREAM_NAME,
+        {
+            "attendee_id": attendee_id,
+            "attendee_name": attendee["name"]
+        }
+    )
 
-    if success:
-        attendee["checked_in"] = True
-        print(f"{attendee['name']}: Checked In")
-    else:
-        print(f"{attendee['name']}: Check-in failed.")
+    print(
+        f"{attendee['name']} is PENDING. "
+        f"Print request queued: {message_id}"
+    )
+
+    return jsonify({
+        "attendee": attendee["name"],
+        "status": "PENDING",
+        "message_id": message_id
+    }), 202
 
 
-# Test attendees
-check_in("A001")
-print()
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json()
 
-check_in("A002")
-print()
+    attendee_id = data.get("attendee_id")
+    status = data.get("status")
 
-check_in("A003")
-print()
+    attendee = attendees.get(attendee_id)
 
-# Duplicate scan test
-check_in("A001")
+    if attendee is None:
+        return jsonify({"error": "Unknown attendee"}), 404
+
+    if status == "printed":
+        attendee["status"] = "CHECKED_IN"
+
+        print(
+            f"Webhook received for {attendee['name']}. "
+            f"Status changed to CHECKED_IN."
+        )
+
+    return jsonify({
+        "message": "Webhook processed",
+        "attendee": attendee["name"],
+        "status": attendee["status"]
+    }), 200
+
+
+@app.route("/status/<attendee_id>", methods=["GET"])
+def status(attendee_id):
+    attendee = attendees.get(attendee_id)
+
+    if attendee is None:
+        return jsonify({"error": "Unknown attendee"}), 404
+
+    return jsonify({
+        "attendee": attendee["name"],
+        "status": attendee["status"]
+    })
+
+
+if __name__ == "__main__":
+    print("Solstice check-in application started.")
+    print("Webhook available at http://localhost:5000/webhook")
+    app.run(host="localhost", port=5000)
