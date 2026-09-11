@@ -38,29 +38,33 @@ print("Waiting for print requests...")
 
 last_id = "0-0"
 
-while True:
-    try:
-        messages = r.xread(
-            {STREAM_NAME: last_id},
-            count=1,
-            block=0
-        )
+try:
+    while True:
+        try:
+            messages = r.xread(
+                {STREAM_NAME: last_id},
+                count=1,
+                block=0
+            )
 
-        if not messages:
+            if not messages:
+                continue
+
+            for stream, entries in messages:
+                for message_id, data in entries:
+                    last_id = message_id
+
+                    attendee_id = data["attendee_id"]
+                    attendee_name = data["attendee_name"]
+
+                    print(f"Received print request for {attendee_name}.")
+                    print("Simulating badge printing...")
+                    print("Badge printed successfully.")
+
+                    send_webhook(attendee_id, attendee_name)
+
+        except redis.exceptions.TimeoutError:
             continue
 
-        for stream, entries in messages:
-            for message_id, data in entries:
-                last_id = message_id
-
-                attendee_id = data["attendee_id"]
-                attendee_name = data["attendee_name"]
-
-                print(f"Received print request for {attendee_name}.")
-                print("Simulating badge printing...")
-                print("Badge printed successfully.")
-
-                send_webhook(attendee_id, attendee_name)
-
-    except redis.exceptions.TimeoutError:
-        continue
+except KeyboardInterrupt:
+    print("\nPrinter worker stopped.")
