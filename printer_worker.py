@@ -43,7 +43,7 @@ while True:
         messages = r.xread(
             {STREAM_NAME: last_id},
             count=1,
-            block=5000
+            block=0
         )
 
         if not messages:
@@ -63,5 +63,4 @@ while True:
                 send_webhook(attendee_id, attendee_name)
 
     except redis.exceptions.TimeoutError:
-        print("Redis read timed out. Continuing to wait...")
         continue
