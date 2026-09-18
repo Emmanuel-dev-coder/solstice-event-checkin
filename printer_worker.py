@@ -36,7 +36,7 @@ def send_webhook(attendee_id, attendee_name):
 print("Printer worker started.")
 print("Waiting for print requests...")
 
-last_id = "0-0"
+last_id = "$"
 
 try:
     while True:

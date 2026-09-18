@@ -15,6 +15,7 @@ attendees = {
     "A001": {"name": "Alice", "status": "NOT_CHECKED_IN"},
     "A002": {"name": "Bob", "status": "NOT_CHECKED_IN"},
     "A003": {"name": "Charlie", "status": "NOT_CHECKED_IN"},
+    "A004": {"name":"Kelvin","status":"NOT_CHECKED_IN"},
 }
 
 
